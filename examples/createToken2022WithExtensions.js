@@ -34,6 +34,9 @@ import {
   getTokenMetadata,
   TYPE_SIZE,
   LENGTH_SIZE,
+  closeAccount,
+  burn,
+  getAccount,
 } from "@solana/spl-token";
 
 import {
@@ -549,6 +552,175 @@ export async function getTokenExtensionsInfo(connection, mint) {
     console.error("获取扩展信息失败:", error.message);
     return null;
   }
+}
+
+/**
+ * 关闭 Mint 账户并回收 SOL
+ *
+ * 前提条件：
+ * 1. 创建时必须设置了 closeAuthority（MintCloseAuthority 扩展）
+ * 2. mint 的 supply 必须为 0（所有代币都已销毁）
+ *
+ * @param {Connection} connection - Solana 连接
+ * @param {Keypair} payer - 付款人
+ * @param {PublicKey} mint - Mint 地址
+ * @param {PublicKey} destination - 接收回收 SOL 的地址
+ * @param {Keypair} closeAuthority - 关闭权限签名者
+ * @returns {Promise<string>} 返回交易签名
+ */
+export async function closeMintAccount(
+  connection,
+  payer,
+  mint,
+  destination,
+  closeAuthority
+) {
+  // 检查 mint 信息
+  const mintInfo = await getMint(
+    connection,
+    mint,
+    "confirmed",
+    TOKEN_2022_PROGRAM_ID
+  );
+
+  // 检查 supply 是否为 0
+  if (mintInfo.supply > 0n) {
+    throw new Error(
+      `无法关闭 mint 账户：supply 不为 0 (当前 supply: ${mintInfo.supply})`
+    );
+  }
+
+  // 检查是否有 closeAuthority
+  if (!mintInfo.mintCloseAuthority) {
+    throw new Error("无法关闭 mint 账户：没有设置 MintCloseAuthority 扩展");
+  }
+
+  const signers = [payer];
+  if (!closeAuthority.publicKey.equals(payer.publicKey)) {
+    signers.push(closeAuthority);
+  }
+
+  const signature = await closeAccount(
+    connection,
+    payer,
+    mint,
+    destination,
+    closeAuthority,
+    [],
+    { commitment: "confirmed" },
+    TOKEN_2022_PROGRAM_ID
+  );
+
+  console.log("Mint 账户已关闭!");
+  console.log("SOL 已回收到:", destination.toBase58());
+  console.log("交易签名:", signature);
+
+  return signature;
+}
+
+/**
+ * 销毁代币（减少 supply）
+ *
+ * @param {Connection} connection - Solana 连接
+ * @param {Keypair} payer - 付款人
+ * @param {PublicKey} mint - Mint 地址
+ * @param {PublicKey} tokenAccount - 要销毁代币的账户
+ * @param {Keypair} owner - token 账户所有者
+ * @param {bigint|number} amount - 销毁数量
+ * @returns {Promise<string>} 返回交易签名
+ */
+export async function burnTokens(
+  connection,
+  payer,
+  mint,
+  tokenAccount,
+  owner,
+  amount
+) {
+  const signers = [payer];
+  if (!owner.publicKey.equals(payer.publicKey)) {
+    signers.push(owner);
+  }
+
+  const signature = await burn(
+    connection,
+    payer,
+    tokenAccount,
+    mint,
+    owner,
+    BigInt(amount),
+    [],
+    { commitment: "confirmed" },
+    TOKEN_2022_PROGRAM_ID
+  );
+
+  console.log("代币已销毁!");
+  console.log("销毁数量:", amount.toString());
+  console.log("交易签名:", signature);
+
+  return signature;
+}
+
+/**
+ * 销毁所有代币并关闭 Mint 账户，回收 SOL
+ *
+ * @param {Connection} connection - Solana 连接
+ * @param {Keypair} payer - 付款人
+ * @param {PublicKey} mint - Mint 地址
+ * @param {PublicKey} destination - 接收回收 SOL 的地址
+ * @param {Keypair} closeAuthority - 关闭权限签名者
+ * @param {Array<{tokenAccount: PublicKey, owner: Keypair}>} tokenAccounts - 需要销毁代币的账户列表
+ * @returns {Promise<Object>} 返回结果
+ */
+export async function burnAllAndCloseMint(
+  connection,
+  payer,
+  mint,
+  destination,
+  closeAuthority,
+  tokenAccounts = []
+) {
+  const results = {
+    burnSignatures: [],
+    closeSignature: null,
+  };
+
+  // 1. 销毁所有代币
+  for (const { tokenAccount, owner } of tokenAccounts) {
+    try {
+      const accountInfo = await getAccount(
+        connection,
+        tokenAccount,
+        "confirmed",
+        TOKEN_2022_PROGRAM_ID
+      );
+
+      if (accountInfo.amount > 0n) {
+        const sig = await burnTokens(
+          connection,
+          payer,
+          mint,
+          tokenAccount,
+          owner,
+          accountInfo.amount
+        );
+        results.burnSignatures.push(sig);
+      }
+    } catch (error) {
+      console.log(`跳过账户 ${tokenAccount.toBase58()}: ${error.message}`);
+    }
+  }
+
+  // 2. 关闭 Mint 账户
+  results.closeSignature = await closeMintAccount(
+    connection,
+    payer,
+    mint,
+    destination,
+    closeAuthority
+  );
+
+  return results;
 }
 
 // ============ 使用示例 ============
