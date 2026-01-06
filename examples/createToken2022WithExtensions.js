@@ -32,6 +32,8 @@ import {
   createInitializeMetadataPointerInstruction,
   getMint,
   getTokenMetadata,
+  TYPE_SIZE,
+  LENGTH_SIZE,
 } from "@solana/spl-token";
 
 import {
@@ -112,13 +114,17 @@ export async function createToken2022WithAllFeatures(
   const metadataLen = pack(tokenMetadata).length;
 
   // 计算 mint 账户所需空间
-  // TokenMetadata 是变长扩展，需要通过第二个参数传入长度
-  const mintLen = getMintLen(extensions, {
-    [ExtensionType.TokenMetadata]: metadataLen,
-  });
+  // 1. 固定长度扩展的空间
+  const mintLen = getMintLen(extensions);
 
-  // 获取租金豁免所需的最小余额
-  const lamports = await connection.getMinimumBalanceForRentExemption(mintLen);
+  // 2. TokenMetadata 是变长扩展，需要额外计算
+  // 格式: [type: 2 bytes][length: 2 bytes][data: N bytes]
+  const metadataExtensionLen = TYPE_SIZE + LENGTH_SIZE + metadataLen;
+
+  // 获取租金豁免所需的最小余额（使用总空间）
+  const lamports = await connection.getMinimumBalanceForRentExemption(
+    mintLen + metadataExtensionLen
+  );
 
   // 构建交易
   const transaction = new Transaction();
