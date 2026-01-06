@@ -112,15 +112,13 @@ export async function createToken2022WithAllFeatures(
   const metadataLen = pack(tokenMetadata).length;
 
   // 计算 mint 账户所需空间
-  const mintLen = getMintLen(extensions);
-  // TokenMetadata 是变长扩展，需要额外计算
-  // 格式: [type: 2 bytes][length: 2 bytes][data: N bytes]
-  const totalMintLen = mintLen + 4 + metadataLen;
+  // TokenMetadata 是变长扩展，需要通过第二个参数传入长度
+  const mintLen = getMintLen(extensions, {
+    [ExtensionType.TokenMetadata]: metadataLen,
+  });
 
   // 获取租金豁免所需的最小余额
-  const lamports = await connection.getMinimumBalanceForRentExemption(
-    totalMintLen
-  );
+  const lamports = await connection.getMinimumBalanceForRentExemption(mintLen);
 
   // 构建交易
   const transaction = new Transaction();
@@ -130,7 +128,7 @@ export async function createToken2022WithAllFeatures(
     SystemProgram.createAccount({
       fromPubkey: payer.publicKey,
       newAccountPubkey: mint.publicKey,
-      space: totalMintLen,
+      space: mintLen,
       lamports,
       programId: TOKEN_2022_PROGRAM_ID,
     })
