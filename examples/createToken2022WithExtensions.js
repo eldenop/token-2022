@@ -4,19 +4,21 @@
  *
  * 依赖安装:
  * npm install @solana/web3.js @solana/spl-token @solana/spl-token-metadata
+ *
+ * 注意: 使用 ES Module，需要在 package.json 中设置 "type": "module"
+ * 或者将文件扩展名改为 .mjs
  */
 
-const {
+import {
   Connection,
   Keypair,
   SystemProgram,
   Transaction,
   sendAndConfirmTransaction,
   PublicKey,
-  SYSVAR_RENT_PUBKEY,
-} = require("@solana/web3.js");
+} from "@solana/web3.js";
 
-const {
+import {
   TOKEN_2022_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
@@ -30,14 +32,14 @@ const {
   createInitializeMetadataPointerInstruction,
   getMint,
   getTokenMetadata,
-} = require("@solana/spl-token");
+} from "@solana/spl-token";
 
-const {
+import {
   createInitializeInstruction,
   createUpdateFieldInstruction,
   createUpdateAuthorityInstruction,
   pack,
-} = require("@solana/spl-token-metadata");
+} from "@solana/spl-token-metadata";
 
 /**
  * 创建带有完整扩展功能的 Token-2022
@@ -59,7 +61,7 @@ const {
  * @param {Array<[string, string]>} [options.additionalMetadata] - 额外的 metadata 键值对
  * @returns {Promise<Object>} 返回创建结果
  */
-async function createToken2022WithAllFeatures(
+export async function createToken2022WithAllFeatures(
   connection,
   payer,
   mintKeypair,
@@ -220,9 +222,14 @@ async function createToken2022WithAllFeatures(
   }
 
   // 发送交易
-  const signature = await sendAndConfirmTransaction(connection, transaction, signers, {
-    commitment: "confirmed",
-  });
+  const signature = await sendAndConfirmTransaction(
+    connection,
+    transaction,
+    signers,
+    {
+      commitment: "confirmed",
+    }
+  );
 
   console.log("Token 创建成功!");
   console.log("Mint 地址:", mint.publicKey.toBase58());
@@ -317,7 +324,7 @@ async function createToken2022WithAllFeatures(
  * @param {Array<[string, string]>} [updates.additionalMetadata] - 额外的 metadata 键值对
  * @returns {Promise<string>} 返回交易签名
  */
-async function updateTokenMetadata(
+export async function updateTokenMetadata(
   connection,
   payer,
   mint,
@@ -420,7 +427,7 @@ async function updateTokenMetadata(
  * @param {PublicKey|null} newAuthority - 新的更新权限（null 表示放弃权限）
  * @returns {Promise<string>} 返回交易签名
  */
-async function updateMetadataAuthority(
+export async function updateMetadataAuthority(
   connection,
   payer,
   mint,
@@ -459,9 +466,9 @@ async function updateMetadataAuthority(
  *
  * @param {Connection} connection - Solana 连接
  * @param {PublicKey} mint - Mint 地址
- * @returns {Promise<Object>} 返回 metadata 信息
+ * @returns {Promise<Object|null>} 返回 metadata 信息
  */
-async function getTokenMetadataInfo(connection, mint) {
+export async function getTokenMetadataInfo(connection, mint) {
   try {
     const metadata = await getTokenMetadata(
       connection,
@@ -492,9 +499,9 @@ async function getTokenMetadataInfo(connection, mint) {
  *
  * @param {Connection} connection - Solana 连接
  * @param {PublicKey} mint - Mint 地址
- * @returns {Promise<Object>} 返回扩展信息
+ * @returns {Promise<Object|null>} 返回扩展信息
  */
-async function getTokenExtensionsInfo(connection, mint) {
+export async function getTokenExtensionsInfo(connection, mint) {
   try {
     const mintInfo = await getMint(
       connection,
@@ -539,15 +546,6 @@ async function getTokenExtensionsInfo(connection, mint) {
     return null;
   }
 }
-
-// 导出函数
-module.exports = {
-  createToken2022WithAllFeatures,
-  updateTokenMetadata,
-  updateMetadataAuthority,
-  getTokenMetadataInfo,
-  getTokenExtensionsInfo,
-};
 
 // ============ 使用示例 ============
 
@@ -638,6 +636,5 @@ async function main() {
 }
 
 // 如果直接运行此文件，执行示例
-if (require.main === module) {
-  main().catch(console.error);
-}
+// 使用: node createToken2022WithExtensions.js
+main().catch(console.error);
